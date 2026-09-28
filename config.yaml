@@ -3,8 +3,8 @@ app:
   report_dir: reports
   min_score: 50
   max_jobs_per_run: 30
-  max_ai_jobs_per_run: 8
-  request_timeout_seconds: 15
+  max_ai_jobs_per_run: 3
+  request_timeout_seconds: 8
   send_empty_report: true
 
 user_profile:
@@ -96,6 +96,7 @@ ai:
   model: ${OPENAI_MODEL:gpt-5}
   base_url: ${OPENAI_BASE_URL:}
   max_output_tokens: 700
+  timeout_seconds: 45
 
 email:
   subject_prefix: C++后端实习机会

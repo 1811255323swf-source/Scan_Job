@@ -15,6 +15,7 @@ class AIAnalyzer:
         self.model = os.getenv("OPENAI_MODEL") or str(ai_config.get("model", "gpt-5"))
         self.base_url = os.getenv("OPENAI_BASE_URL") or str(ai_config.get("base_url", "") or "")
         self.max_output_tokens = int(ai_config.get("max_output_tokens", 700))
+        self.timeout_seconds = float(ai_config.get("timeout_seconds", 45))
 
     def enabled(self) -> bool:
         if self.provider in {"", "disabled", "none", "false"}:
@@ -103,7 +104,7 @@ class AIAnalyzer:
     def _analyze_with_openai_responses(self, prompt: str) -> str:
         from openai import OpenAI
 
-        client = OpenAI()
+        client = OpenAI(timeout=self.timeout_seconds)
         response = client.responses.create(
             model=self.model,
             input=prompt,
@@ -118,7 +119,7 @@ class AIAnalyzer:
         client_kwargs = {"api_key": api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
-        client = OpenAI(**client_kwargs)
+        client = OpenAI(timeout=self.timeout_seconds, **client_kwargs)
         response = client.chat.completions.create(
             model=self.model,
             messages=[
