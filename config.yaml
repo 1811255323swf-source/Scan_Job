@@ -1,0 +1,151 @@
+app:
+  database_path: database/jobs.db
+  report_dir: reports
+  min_score: 50
+  max_jobs_per_run: 30
+  max_ai_jobs_per_run: 8
+  request_timeout_seconds: 15
+  send_empty_report: true
+
+user_profile:
+  school: 湖北工业大学
+  major: 计算机科学与技术
+  graduation_year: "2028"
+  target_locations:
+    - 武汉
+    - 远程
+  skills:
+    - C++
+    - Python
+    - 数据结构
+    - 操作系统
+    - 计算机网络
+    - Linux
+    - Socket
+    - 多线程
+    - 线程池
+    - epoll
+  learning:
+    - TCP
+    - select
+    - poll
+    - Reactor
+    - MySQL
+    - Redis
+
+keywords:
+  positive:
+    - C++
+    - C/C++
+    - CPP
+    - Linux
+    - Socket
+    - TCP
+    - UDP
+    - epoll
+    - 服务器
+    - 服务端
+    - 后端
+    - 网络
+    - 高性能
+    - 并发
+    - 多线程
+    - 系统开发
+    - 基础架构
+    - 嵌入式
+    - 网络通信
+  negative:
+    - 游戏客户端
+    - Unity
+    - 前端
+    - 测试
+    - 销售
+    - 运营
+    - 纯运维
+    - Java Web
+    - 产品经理
+
+scoring:
+  rules:
+    - name: C++
+      keywords: [C++, C/C++, CPP, Cpp, c++]
+      score: 20
+    - name: Linux
+      keywords: [Linux, linux, Unix, UNIX]
+      score: 20
+    - name: Socket/网络编程
+      keywords: [Socket, socket, 网络编程, 网络通信, 服务端通信]
+      score: 20
+    - name: TCP/UDP
+      keywords: [TCP, UDP, tcp, udp, 协议栈]
+      score: 10
+    - name: epoll/高并发
+      keywords: [epoll, IO多路复用, I/O多路复用, 高并发, 并发]
+      score: 10
+    - name: 后端/服务端
+      keywords: [后端, 服务端, 服务器, 系统开发, 基础架构]
+      score: 15
+  location_score: 15
+  graduation_score: 10
+  non_target_penalty: -30
+  internship_conflict_penalty: -10
+  negative_keyword_penalty: -30
+
+ai:
+  provider: ${AI_PROVIDER:openai}
+  model: ${OPENAI_MODEL:gpt-5}
+  base_url: ${OPENAI_BASE_URL:}
+  max_output_tokens: 700
+
+email:
+  subject_prefix: C++后端实习机会
+  enabled: true
+  smtp_host: ${SMTP_HOST:}
+  smtp_port: ${SMTP_PORT:587}
+  smtp_username: ${SMTP_USERNAME:}
+  smtp_password: ${SMTP_PASSWORD:}
+  from_addr: ${EMAIL_FROM:}
+  to_addr: ${EMAIL_TO:}
+
+sources:
+  - name: nowcoder
+    type: nowcoder
+    enabled: true
+    keywords:
+      - C++ 后端 实习
+      - Linux 服务端 实习
+      - 网络编程 实习
+    locations:
+      - 武汉
+    max_pages: 1
+
+  - name: shixiseng
+    type: shixiseng
+    enabled: true
+    keywords:
+      - C++ 后端
+      - Linux
+      - 网络通信
+    locations:
+      - 武汉
+    max_pages: 1
+
+  - name: yingjiesheng
+    type: yingjiesheng
+    enabled: true
+    keywords:
+      - C++ 后端 实习
+      - Linux 实习
+    max_pages: 1
+
+  - name: company_pages
+    type: generic
+    enabled: true
+    urls:
+      - https://join.qq.com/
+      - https://campus.alibaba.com/
+      - https://jobs.bytedance.com/campus/
+      - https://career.huawei.com/reccampportal/portal5/campus-recruitment.html
+      - https://talent.baidu.com/jobs/list
+    max_items: 80
+
