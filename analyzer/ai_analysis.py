@@ -12,8 +12,20 @@ class AIAnalyzer:
         self.config = config
         ai_config = config.get("ai", {})
         self.provider = str(ai_config.get("provider", "openai")).strip().lower()
-        self.model = os.getenv("OPENAI_MODEL") or str(ai_config.get("model", "gpt-5"))
-        self.base_url = os.getenv("OPENAI_BASE_URL") or str(ai_config.get("base_url", "") or "")
+        configured_model = str(ai_config.get("model", "deepseek-chat"))
+        self.model = os.getenv("AI_MODEL") or os.getenv("OPENAI_MODEL") or configured_model
+        if self.provider == "openai" and self.model == "deepseek-chat":
+            self.model = "gpt-5"
+
+        configured_base_url = str(ai_config.get("base_url", "") or "")
+        self.base_url = (
+            os.getenv("AI_BASE_URL")
+            or os.getenv("DEEPSEEK_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or configured_base_url
+        )
+        if self.provider == "deepseek" and not self.base_url:
+            self.base_url = "https://api.deepseek.com"
         self.max_output_tokens = int(ai_config.get("max_output_tokens", 700))
         self.timeout_seconds = float(ai_config.get("timeout_seconds", 45))
 
@@ -22,8 +34,8 @@ class AIAnalyzer:
             return False
         if self.provider == "openai":
             return bool(os.getenv("OPENAI_API_KEY"))
-        if self.provider == "openai_compatible":
-            return bool(os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY"))
+        if self.provider in {"deepseek", "openai_compatible"}:
+            return bool(self._api_key())
         return False
 
     def analyze(self, job: Job, score_result: ScoreResult) -> str:
@@ -115,7 +127,7 @@ class AIAnalyzer:
     def _analyze_with_chat_completions(self, prompt: str) -> str:
         from openai import OpenAI
 
-        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+        api_key = self._api_key()
         client_kwargs = {"api_key": api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
@@ -130,6 +142,11 @@ class AIAnalyzer:
             temperature=0.2,
         )
         return (response.choices[0].message.content or "").strip()
+
+    def _api_key(self) -> str:
+        if self.provider == "deepseek":
+            return os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+        return os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or ""
 
 
 def ai_enabled_from_config(config: dict) -> bool:

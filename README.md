@@ -25,7 +25,8 @@ GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒�
 
 | Secret | 用途 | 必填 |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | AI 岗位分析 | 否 |
+| `DEEPSEEK_API_KEY` | DeepSeek AI 岗位分析 | 否 |
+| `OPENAI_API_KEY` | 切换 OpenAI 时使用 | 否 |
 | `SMTP_HOST` | SMTP 服务器，如 `smtp.gmail.com` | 发邮件必填 |
 | `SMTP_PORT` | SMTP 端口，如 `587` | 发邮件必填 |
 | `SMTP_USERNAME` | 邮箱登录用户名 | 发邮件必填 |
@@ -37,11 +38,22 @@ GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒�
 
 | Variable | 默认值 | 用途 |
 | --- | --- | --- |
-| `OPENAI_MODEL` | `gpt-5` | AI 分析模型 |
-| `AI_PROVIDER` | `openai` | `openai`、`openai_compatible` 或 `disabled` |
-| `OPENAI_BASE_URL` | 空 | OpenAI-compatible 服务地址 |
+| `AI_PROVIDER` | `deepseek` | `deepseek`、`openai`、`openai_compatible` 或 `disabled` |
+| `AI_MODEL` | `deepseek-chat` | AI 分析模型 |
+| `AI_BASE_URL` | `https://api.deepseek.com` | DeepSeek/OpenAI-compatible 服务地址 |
 
 如果没有配置邮件 Secrets，程序仍会生成 `reports/latest.md`，但不会发送邮件。
+
+## DeepSeek 配置
+
+如果使用 DeepSeek，只需要在 GitHub Actions Secrets 里添加：
+
+```text
+Name: DEEPSEEK_API_KEY
+Secret: 你的 DeepSeek API Key
+```
+
+默认配置会使用 `AI_PROVIDER=deepseek`、`AI_MODEL=deepseek-chat`、`AI_BASE_URL=https://api.deepseek.com`。这些默认值不需要手动添加为 Variables。
 
 ## 手动触发
 
