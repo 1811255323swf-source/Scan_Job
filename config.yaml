@@ -93,7 +93,7 @@ scoring:
 
 ai:
   provider: ${AI_PROVIDER:deepseek}
-  model: ${AI_MODEL:deepseek-chat}
+  model: ${AI_MODEL:deepseek-v4-flash}
   base_url: ${AI_BASE_URL:}
   max_output_tokens: 700
   timeout_seconds: 45
@@ -103,6 +103,8 @@ email:
   enabled: true
   smtp_host: ${SMTP_HOST:}
   smtp_port: ${SMTP_PORT:587}
+  smtp_use_ssl: ${SMTP_USE_SSL:}
+  smtp_starttls: ${SMTP_STARTTLS:true}
   smtp_username: ${SMTP_USERNAME:}
   smtp_password: ${SMTP_PASSWORD:}
   from_addr: ${EMAIL_FROM:}

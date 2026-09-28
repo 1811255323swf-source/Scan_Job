@@ -29,6 +29,8 @@ GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒�
 | `OPENAI_API_KEY` | 切换 OpenAI 时使用 | 否 |
 | `SMTP_HOST` | SMTP 服务器，如 `smtp.gmail.com` | 发邮件必填 |
 | `SMTP_PORT` | SMTP 端口，如 `587` | 发邮件必填 |
+| `SMTP_USE_SSL` | 465 端口时可填 `true`，留空会自动判断 | 否 |
+| `SMTP_STARTTLS` | 587 端口时通常填 `true` | 否 |
 | `SMTP_USERNAME` | 邮箱登录用户名 | 发邮件必填 |
 | `SMTP_PASSWORD` | 邮箱密码或应用专用密码 | 发邮件必填 |
 | `EMAIL_FROM` | 发件邮箱 | 发邮件必填 |
@@ -39,10 +41,36 @@ GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒�
 | Variable | 默认值 | 用途 |
 | --- | --- | --- |
 | `AI_PROVIDER` | `deepseek` | `deepseek`、`openai`、`openai_compatible` 或 `disabled` |
-| `AI_MODEL` | `deepseek-chat` | AI 分析模型 |
+| `AI_MODEL` | `deepseek-v4-flash` | AI 分析模型 |
 | `AI_BASE_URL` | `https://api.deepseek.com` | DeepSeek/OpenAI-compatible 服务地址 |
 
 如果没有配置邮件 Secrets，程序仍会生成 `reports/latest.md`，但不会发送邮件。
+
+## 邮箱推送配置
+
+如果使用 QQ 邮箱，建议先在 QQ 邮箱设置里开启 `POP3/SMTP` 或 `IMAP/SMTP`，生成授权码。GitHub Actions Secrets 可按下面填写：
+
+```text
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USE_SSL=true
+SMTP_USERNAME=你的QQ邮箱地址
+SMTP_PASSWORD=QQ邮箱授权码，不是QQ登录密码
+EMAIL_FROM=你的QQ邮箱地址
+EMAIL_TO=接收日报的邮箱地址
+```
+
+如果使用 Gmail，常见配置是：
+
+```text
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_STARTTLS=true
+SMTP_USERNAME=你的Gmail地址
+SMTP_PASSWORD=Gmail应用专用密码
+EMAIL_FROM=你的Gmail地址
+EMAIL_TO=接收日报的邮箱地址
+```
 
 ## DeepSeek 配置
 
@@ -53,7 +81,7 @@ Name: DEEPSEEK_API_KEY
 Secret: 你的 DeepSeek API Key
 ```
 
-默认配置会使用 `AI_PROVIDER=deepseek`、`AI_MODEL=deepseek-chat`、`AI_BASE_URL=https://api.deepseek.com`。这些默认值不需要手动添加为 Variables。
+默认配置会使用 `AI_PROVIDER=deepseek`、`AI_MODEL=deepseek-v4-flash`、`AI_BASE_URL=https://api.deepseek.com`。这些默认值不需要手动添加为 Variables。
 
 ## 手动触发
 

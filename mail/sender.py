@@ -82,6 +82,9 @@ def send_email(subject: str, markdown: str, config: dict) -> bool:
 
     smtp_host = str(email_config.get("smtp_host", "") or "")
     smtp_port = int(email_config.get("smtp_port", 587) or 587)
+    smtp_use_ssl_raw = str(email_config.get("smtp_use_ssl", "") or "").strip()
+    smtp_use_ssl = as_bool(smtp_use_ssl_raw) if smtp_use_ssl_raw else smtp_port == 465
+    smtp_starttls = as_bool(email_config.get("smtp_starttls", True))
     username = str(email_config.get("smtp_username", "") or "")
     password = str(email_config.get("smtp_password", "") or "")
     from_addr = str(email_config.get("from_addr", "") or username)
@@ -109,8 +112,10 @@ def send_email(subject: str, markdown: str, config: dict) -> bool:
     message.set_content(markdown)
     message.add_alternative(_markdown_to_basic_html(markdown), subtype="html")
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as smtp:
-        smtp.starttls()
+    smtp_class = smtplib.SMTP_SSL if smtp_use_ssl else smtplib.SMTP
+    with smtp_class(smtp_host, smtp_port, timeout=30) as smtp:
+        if not smtp_use_ssl and smtp_starttls:
+            smtp.starttls()
         smtp.login(username, password)
         smtp.send_message(message)
     LOGGER.info("email sent to %s", to_addr)

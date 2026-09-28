@@ -12,9 +12,9 @@ class AIAnalyzer:
         self.config = config
         ai_config = config.get("ai", {})
         self.provider = str(ai_config.get("provider", "openai")).strip().lower()
-        configured_model = str(ai_config.get("model", "deepseek-chat"))
+        configured_model = str(ai_config.get("model", "deepseek-v4-flash"))
         self.model = os.getenv("AI_MODEL") or os.getenv("OPENAI_MODEL") or configured_model
-        if self.provider == "openai" and self.model == "deepseek-chat":
+        if self.provider == "openai" and self.model.startswith("deepseek-"):
             self.model = "gpt-5"
 
         configured_base_url = str(ai_config.get("base_url", "") or "")
