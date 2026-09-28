@@ -143,7 +143,7 @@ sources:
 
   - name: company_pages
     type: generic
-    enabled: true
+    enabled: false
     urls:
       - https://join.qq.com/
       - https://campus.alibaba.com/
