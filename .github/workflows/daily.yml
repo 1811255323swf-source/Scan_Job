@@ -68,6 +68,7 @@ jobs:
           exit "$missing"
 
       - name: Run cloud monitor
+        if: github.event_name != 'push'
         shell: bash
         run: |
           set -o pipefail
