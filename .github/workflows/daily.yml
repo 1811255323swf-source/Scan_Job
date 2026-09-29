@@ -6,7 +6,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: "0 */6 * * *"
+    # GitHub Actions cron uses UTC. 10:00 UTC = 18:00 Asia/Shanghai.
+    - cron: "0 10 * * *"
 
 permissions:
   contents: write
@@ -70,7 +71,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python main.py --config config.yaml --require-email 2>&1 | tee run.log
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python main.py --config config.yaml --require-email 2>&1 | tee run.log
+          else
+            python main.py --config config.yaml --no-email 2>&1 | tee run.log
+          fi
 
       - name: Write run summary
         if: always()

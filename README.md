@@ -8,7 +8,7 @@
 
 本项目不是在本地常驻运行，而是在 GitHub Actions 云端按计划启动：
 
-- 默认每 6 小时运行一次
+- 默认每天北京时间 18:00 运行一次
 - 支持在 GitHub Actions 页面手动运行
 - 每次运行结束后会把 `database/jobs.db` 和 `reports/latest.md` 提交回仓库
 - SQLite 数据库用于跨运行去重，避免重复推送同一岗位
@@ -68,7 +68,7 @@ app:
 | `AI_MODEL` | `deepseek-v4-flash` | AI 分析模型 |
 | `AI_BASE_URL` | `https://api.deepseek.com` | DeepSeek/OpenAI-compatible 服务地址 |
 
-云端 workflow 会强制检查邮件 Secrets，并使用 `--require-email`。未达到每日停止条件时不会发邮件，也不会因为暂未发送而失败；一旦达到停止条件，如果邮件配置缺失或发送失败，本次 Actions 会失败，避免出现“显示成功但其实没发邮件”的情况。
+云端 workflow 会强制检查邮件 Secrets。定时任务在每天 UTC 10:00（北京时间 18:00）运行，并使用 `--require-email`；push 和手动触发会使用 `--no-email`，只做检查和更新报告，不会在 18:00 之外发邮件。未达到每日停止条件时不会发邮件，也不会因为暂未发送而失败；一旦达到停止条件，如果邮件配置缺失或发送失败，本次 Actions 会失败，避免出现“显示成功但其实没发邮件”的情况。
 
 ## 邮箱推送配置
 
