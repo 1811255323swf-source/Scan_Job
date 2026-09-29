@@ -52,17 +52,23 @@ jobs:
         run: |
           run_date="$(TZ=Asia/Shanghai date +%F)"
           marker=".github/state/job-email-sent/${run_date}"
+          send_requested="false"
           should_run="true"
           reason="ready"
 
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$marker" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ contains(github.event.head_commit.message, '[send-now]') }}" = "true" ]; then
+            send_requested="true"
+          fi
+
+          if [ "$send_requested" = "true" ] && [ -f "$marker" ]; then
             should_run="false"
             reason="already sent for ${run_date}"
-            echo "[schedule] $reason"
+            echo "$reason"
           fi
 
           echo "run_date=$run_date" >> "$GITHUB_OUTPUT"
           echo "marker=$marker" >> "$GITHUB_OUTPUT"
+          echo "send_requested=$send_requested" >> "$GITHUB_OUTPUT"
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
@@ -107,8 +113,8 @@ jobs:
             python main.py --config config.yaml --no-email 2>&1 | tee run.log
           fi
 
-      - name: Mark schedule email sent
-        if: success() && github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true'
+      - name: Mark email sent
+        if: success() && steps.run-mode.outputs.send_requested == 'true' && steps.run-mode.outputs.should_run == 'true'
         shell: bash
         run: |
           sent_flag="reports/email_sent_${{ steps.run-mode.outputs.run_date }}.flag"
