@@ -62,6 +62,14 @@ def configured_timezone(name: str):
         return timezone.utc
 
 
+def write_email_sent_flag(report_dir: str | Path, run_date: str) -> Path:
+    path = Path(report_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    flag_path = path / f"email_sent_{run_date}.flag"
+    flag_path.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+    return flag_path
+
+
 def run(config: dict, no_email: bool = False, require_email: bool = False, force_email: bool = False) -> int:
     logger = logging.getLogger("main")
     app_config = config.get("app", {})
@@ -221,6 +229,9 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
             subject_prefix = config.get("email", {}).get("subject_prefix", "C++后端实习机会")
             subject = f"{subject_prefix} - {generated_at.strftime('%Y-%m-%d')}"
             email_sent = send_email(subject, report, config)
+            if email_sent:
+                flag_path = write_email_sent_flag(app_config.get("report_dir", "reports"), run_date)
+                logger.info("email sent flag written to %s", flag_path)
         else:
             logger.info(
                 "email postponed until daily completion: %d/%d valid jobs, %d/%d attempts",

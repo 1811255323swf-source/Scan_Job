@@ -6,8 +6,11 @@ on:
     branches:
       - main
   schedule:
-    # GitHub Actions cron uses UTC. 10:00 UTC = 18:00 Asia/Shanghai.
-    - cron: "0 10 * * *"
+    # GitHub Actions cron uses UTC. These retries cover 18:03-18:45 Asia/Shanghai.
+    - cron: "3 10 * * *"
+    - cron: "17 10 * * *"
+    - cron: "31 10 * * *"
+    - cron: "45 10 * * *"
 
 permissions:
   contents: write
@@ -43,19 +46,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve run mode
+        id: run-mode
+        shell: bash
+        run: |
+          run_date="$(TZ=Asia/Shanghai date +%F)"
+          marker=".github/state/job-email-sent/${run_date}"
+          should_run="true"
+          reason="ready"
+
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$marker" ]; then
+            should_run="false"
+            reason="already sent for ${run_date}"
+            echo "[schedule] $reason"
+          fi
+
+          echo "run_date=$run_date" >> "$GITHUB_OUTPUT"
+          echo "marker=$marker" >> "$GITHUB_OUTPUT"
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
+        if: steps.run-mode.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
       - name: Install dependencies
+        if: steps.run-mode.outputs.should_run == 'true'
         run: python -m pip install -r requirements.txt
 
       - name: Run tests
+        if: steps.run-mode.outputs.should_run == 'true'
         run: python -m pytest
 
       - name: Validate email secrets
+        if: steps.run-mode.outputs.should_run == 'true'
         shell: bash
         run: |
           missing=0
@@ -68,7 +95,7 @@ jobs:
           exit "$missing"
 
       - name: Run cloud monitor
-        if: github.event_name != 'push' || contains(github.event.head_commit.message, '[send-now]')
+        if: steps.run-mode.outputs.should_run == 'true' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[send-now]'))
         shell: bash
         run: |
           set -o pipefail
@@ -80,10 +107,36 @@ jobs:
             python main.py --config config.yaml --no-email 2>&1 | tee run.log
           fi
 
+      - name: Mark schedule email sent
+        if: success() && github.event_name == 'schedule' && steps.run-mode.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          sent_flag="reports/email_sent_${{ steps.run-mode.outputs.run_date }}.flag"
+          if [ ! -f "$sent_flag" ]; then
+            echo "No email sent flag found at $sent_flag; do not mark the day as sent."
+            exit 0
+          fi
+
+          mkdir -p "$(dirname "${{ steps.run-mode.outputs.marker }}")"
+          {
+            echo "run_id=${{ github.run_id }}"
+            echo "run_date=${{ steps.run-mode.outputs.run_date }}"
+            echo "sent_at=$(TZ=Asia/Shanghai date --iso-8601=seconds)"
+          } > "${{ steps.run-mode.outputs.marker }}"
+
       - name: Write run summary
         if: always()
         shell: bash
         run: |
+          if [ "${{ steps.run-mode.outputs.should_run }}" != "true" ]; then
+            {
+              echo "## Cloud Job Monitor"
+              echo ""
+              echo "Skipped: ${{ steps.run-mode.outputs.reason }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           {
             echo "## Cloud Job Monitor"
             echo ""
@@ -113,10 +166,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit monitor state
+        if: steps.run-mode.outputs.should_run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add database/jobs.db reports/latest.md
+          git add database/jobs.db reports/latest.md reports/email_sent_*.flag .github/state/job-email-sent/
           if ! git diff --cached --quiet; then
             git commit -m "chore: update job monitor state [skip ci]"
             git pull --rebase

@@ -120,6 +120,8 @@ def test_run_postpones_email_before_daily_completion(monkeypatch, tmp_path):
 
     assert monitor.run(config, require_email=True) == 0
     assert sent_messages == []
+    run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
+    assert not (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
 
 
 def test_run_sends_email_after_daily_target(monkeypatch, tmp_path):
@@ -147,6 +149,7 @@ def test_run_sends_email_after_daily_target(monkeypatch, tmp_path):
     assert monitor.run(config, require_email=True) == 0
     run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
     assert sent_messages == [f"test - {run_date}"]
+    assert (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
 
 
 def test_run_sends_email_after_daily_attempt_limit(monkeypatch, tmp_path):
@@ -161,6 +164,7 @@ def test_run_sends_email_after_daily_attempt_limit(monkeypatch, tmp_path):
     assert monitor.run(config, require_email=True) == 0
     run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
     assert sent_messages == [f"test - {run_date}"]
+    assert (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
 
 
 def test_run_force_sends_email_before_daily_completion(monkeypatch, tmp_path):
@@ -177,3 +181,4 @@ def test_run_force_sends_email_before_daily_completion(monkeypatch, tmp_path):
     assert monitor.run(config, require_email=True, force_email=True) == 0
     run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
     assert sent_messages == [f"test - {run_date}"]
+    assert (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
