@@ -161,3 +161,17 @@ def test_run_sends_email_after_daily_attempt_limit(monkeypatch, tmp_path):
     assert monitor.run(config, require_email=True) == 0
     run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
     assert sent_messages == [f"test - {run_date}"]
+
+
+def test_run_force_sends_email_before_daily_completion(monkeypatch, tmp_path):
+    crawler = FakeCrawler([[]])
+    sent_messages = []
+
+    monkeypatch.setattr(monitor, "build_crawlers", lambda config: [crawler])
+    monkeypatch.setattr(monitor, "send_email", lambda subject, report, config: sent_messages.append(subject) or True)
+
+    config = base_config(tmp_path, target=10, max_attempts=200, per_run_attempts=1)
+
+    assert monitor.run(config, require_email=True, force_email=True) == 0
+    run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
+    assert sent_messages == [f"test - {run_date}"]

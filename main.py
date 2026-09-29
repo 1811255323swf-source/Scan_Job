@@ -24,6 +24,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Fail the run if email is skipped or cannot be sent.",
     )
+    parser.add_argument(
+        "--force-email",
+        action="store_true",
+        help="Send the current report even if the daily crawl target is not complete.",
+    )
     return parser.parse_args()
 
 
@@ -57,7 +62,7 @@ def configured_timezone(name: str):
         return timezone.utc
 
 
-def run(config: dict, no_email: bool = False, require_email: bool = False) -> int:
+def run(config: dict, no_email: bool = False, require_email: bool = False, force_email: bool = False) -> int:
     logger = logging.getLogger("main")
     app_config = config.get("app", {})
     min_score = int(app_config.get("min_score", 50))
@@ -193,7 +198,7 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
                 "daily_valid_jobs": final_daily_stats["valid_jobs"],
                 "daily_target_valid_jobs": daily_target_valid_jobs,
                 "attempts_this_run": attempts_this_run,
-                "daily_complete": daily_complete,
+                "daily_complete": daily_complete or force_email,
             }
         )
 
@@ -205,10 +210,10 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
         email_sent = False
         if no_email:
             logger.info("email skipped by --no-email")
-            if require_email and daily_complete:
+            if require_email and (daily_complete or force_email):
                 logger.error("--require-email cannot be used with --no-email after the daily crawl is complete")
                 return 2
-        elif daily_complete:
+        elif daily_complete or force_email:
             subject_prefix = config.get("email", {}).get("subject_prefix", "C++后端实习机会")
             subject = f"{subject_prefix} - {generated_at.strftime('%Y-%m-%d')}"
             email_sent = send_email(subject, report, config)
@@ -221,7 +226,7 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
                 max_daily_crawl_attempts,
             )
 
-        if require_email and daily_complete and not email_sent:
+        if require_email and (daily_complete or force_email) and not email_sent:
             logger.error("email was required but was not sent")
             return 2
 
@@ -235,7 +240,7 @@ def main() -> int:
     args = parse_args()
     setup_logging()
     config = load_config(Path(args.config))
-    return run(config, no_email=args.no_email, require_email=args.require_email)
+    return run(config, no_email=args.no_email, require_email=args.require_email, force_email=args.force_email)
 
 
 if __name__ == "__main__":

@@ -68,12 +68,14 @@ jobs:
           exit "$missing"
 
       - name: Run cloud monitor
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, '[send-now]')
         shell: bash
         run: |
           set -o pipefail
           if [ "${{ github.event_name }}" = "schedule" ]; then
             python main.py --config config.yaml --require-email 2>&1 | tee run.log
+          elif [ "${{ contains(github.event.head_commit.message, '[send-now]') }}" = "true" ]; then
+            python main.py --config config.yaml --force-email --require-email 2>&1 | tee run.log
           else
             python main.py --config config.yaml --no-email 2>&1 | tee run.log
           fi
