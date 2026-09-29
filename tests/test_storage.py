@@ -19,3 +19,20 @@ def test_store_deduplicates_by_url(tmp_path):
     finally:
         store.close()
 
+
+def test_store_tracks_daily_crawl_progress(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+
+    try:
+        assert store.daily_stats("2026-09-29") == {"attempts": 0, "valid_jobs": 0}
+
+        assert store.add_daily_attempt("2026-09-29") == 1
+        assert store.add_daily_attempt("2026-09-29") == 2
+        assert store.add_daily_valid_jobs("2026-09-29", 3) == 3
+        assert store.add_daily_valid_jobs("2026-09-29", 0) == 3
+
+        assert store.daily_stats("2026-09-29") == {"attempts": 2, "valid_jobs": 3}
+        assert store.daily_stats("2026-09-30") == {"attempts": 0, "valid_jobs": 0}
+    finally:
+        store.close()
+

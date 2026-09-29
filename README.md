@@ -12,8 +12,26 @@
 - 支持在 GitHub Actions 页面手动运行
 - 每次运行结束后会把 `database/jobs.db` 和 `reports/latest.md` 提交回仓库
 - SQLite 数据库用于跨运行去重，避免重复推送同一岗位
+- 每天会累计有效岗位数量；如果当天未达到 10 个有效岗位，会继续爬取，直到达到 10 个或当天累计爬取 200 轮
 
 GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒方式适合招聘信息监控。
+
+## 每日爬取目标
+
+`config.yaml` 里的默认策略是：
+
+```yaml
+app:
+  daily_timezone: Asia/Shanghai
+  daily_target_valid_jobs: 10
+  max_daily_crawl_attempts: 200
+  max_crawl_attempts_per_run: 200
+  crawl_interval_seconds: 0
+```
+
+有效岗位指：规则评分未被排除、分数达到 `min_score`、并且数据库里没有见过的新岗位。重复链接不会重复计数。
+
+一轮爬取会跑完当前启用的所有 `sources`。云端 workflow 超时时间设置为 360 分钟，避免 200 轮还没跑完就被提前结束。
 
 ## 需要配置的 GitHub Secrets
 

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import datetime
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from analyzer import AIAnalyzer, score_job
 from crawler import build_crawlers
@@ -44,12 +46,28 @@ def unique_jobs(jobs: list[Job]) -> list[Job]:
     return result
 
 
+def configured_timezone(name: str):
+    normalized = (name or "Asia/Shanghai").strip()
+    try:
+        return ZoneInfo(normalized)
+    except ZoneInfoNotFoundError:
+        if normalized in {"Asia/Shanghai", "China", "UTC+8", "UTC+08:00"}:
+            return timezone(timedelta(hours=8), "Asia/Shanghai")
+        logging.getLogger("main").warning("unknown timezone %s, fallback to UTC", normalized)
+        return timezone.utc
+
+
 def run(config: dict, no_email: bool = False, require_email: bool = False) -> int:
     logger = logging.getLogger("main")
     app_config = config.get("app", {})
     min_score = int(app_config.get("min_score", 50))
     max_jobs = int(app_config.get("max_jobs_per_run", 30))
     max_ai_jobs = int(app_config.get("max_ai_jobs_per_run", 8))
+    daily_target_valid_jobs = int(app_config.get("daily_target_valid_jobs", 10))
+    max_daily_crawl_attempts = int(app_config.get("max_daily_crawl_attempts", 200))
+    max_crawl_attempts_per_run = int(app_config.get("max_crawl_attempts_per_run", max_daily_crawl_attempts))
+    crawl_interval_seconds = float(app_config.get("crawl_interval_seconds", 0))
+    report_tz = configured_timezone(str(app_config.get("daily_timezone", "Asia/Shanghai")))
 
     store = JobStore(app_config.get("database_path", "database/jobs.db"))
     analyzer = AIAnalyzer(config)
@@ -60,47 +78,122 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
         crawlers = build_crawlers(config)
         logger.info("enabled crawlers: %s", ", ".join(crawler.name for crawler in crawlers) or "none")
 
-        crawled_jobs: list[Job] = []
-        for crawler in crawlers:
-            jobs = crawler.crawl()
-            logger.info("%s fetched %d jobs", crawler.name, len(jobs))
-            crawled_jobs.extend(jobs)
+        generated_at = datetime.now(report_tz)
+        run_date = generated_at.strftime("%Y-%m-%d")
+        attempts_this_run = 0
 
-        crawled_jobs = unique_jobs(crawled_jobs)
-        logger.info("total unique fetched jobs: %d", len(crawled_jobs))
+        if not crawlers:
+            logger.warning("no enabled crawlers, skip crawl loop")
 
-        for job in crawled_jobs:
-            score_result = score_job(job, config)
-            if score_result.excluded or score_result.score < min_score:
-                continue
-            if store.seen(job):
-                continue
+        while crawlers and len(analyzed_jobs) < max_jobs:
+            daily_stats = store.daily_stats(run_date)
+            daily_attempts = daily_stats["attempts"]
+            daily_valid_jobs = daily_stats["valid_jobs"]
 
-            if analyzer.enabled() and ai_count < max_ai_jobs:
-                ai_analysis = analyzer.analyze(job, score_result)
-                ai_count += 1
-            else:
-                ai_analysis = analyzer.fallback(job, score_result)
-
-            inserted = store.insert(job, score_result, ai_analysis)
-            if not inserted:
-                continue
-
-            analyzed_jobs.append(
-                AnalyzedJob(
-                    job=job,
-                    score=score_result.score,
-                    level=score_result.level,
-                    matched_rules=score_result.matched_rules,
-                    penalties=score_result.penalties,
-                    ai_analysis=ai_analysis,
+            if daily_valid_jobs >= daily_target_valid_jobs:
+                logger.info(
+                    "daily target reached: %d/%d valid jobs",
+                    daily_valid_jobs,
+                    daily_target_valid_jobs,
                 )
-            )
-            if len(analyzed_jobs) >= max_jobs:
+                break
+            if daily_attempts >= max_daily_crawl_attempts:
+                logger.info(
+                    "daily crawl limit reached: %d/%d attempts",
+                    daily_attempts,
+                    max_daily_crawl_attempts,
+                )
+                break
+            if attempts_this_run >= max_crawl_attempts_per_run:
+                logger.info(
+                    "per-run crawl limit reached: %d/%d attempts",
+                    attempts_this_run,
+                    max_crawl_attempts_per_run,
+                )
                 break
 
-        generated_at = datetime.now()
-        report = build_markdown_report(analyzed_jobs, generated_at, config, store.stats())
+            attempt_no = store.add_daily_attempt(run_date)
+            attempts_this_run += 1
+            logger.info(
+                "crawl attempt %d/%d for %s, target progress %d/%d",
+                attempt_no,
+                max_daily_crawl_attempts,
+                run_date,
+                daily_valid_jobs,
+                daily_target_valid_jobs,
+            )
+
+            crawled_jobs: list[Job] = []
+            for crawler in crawlers:
+                jobs = crawler.crawl()
+                logger.info("%s fetched %d jobs", crawler.name, len(jobs))
+                crawled_jobs.extend(jobs)
+
+            crawled_jobs = unique_jobs(crawled_jobs)
+            logger.info("attempt %d unique fetched jobs: %d", attempt_no, len(crawled_jobs))
+
+            new_valid_jobs = 0
+            for job in crawled_jobs:
+                score_result = score_job(job, config)
+                if score_result.excluded or score_result.score < min_score:
+                    continue
+                if store.seen(job):
+                    continue
+
+                if analyzer.enabled() and ai_count < max_ai_jobs:
+                    ai_analysis = analyzer.analyze(job, score_result)
+                    ai_count += 1
+                else:
+                    ai_analysis = analyzer.fallback(job, score_result)
+
+                inserted = store.insert(job, score_result, ai_analysis)
+                if not inserted:
+                    continue
+
+                new_valid_jobs += 1
+                analyzed_jobs.append(
+                    AnalyzedJob(
+                        job=job,
+                        score=score_result.score,
+                        level=score_result.level,
+                        matched_rules=score_result.matched_rules,
+                        penalties=score_result.penalties,
+                        ai_analysis=ai_analysis,
+                    )
+                )
+
+                if len(analyzed_jobs) >= max_jobs:
+                    break
+
+            daily_valid_jobs = store.add_daily_valid_jobs(run_date, new_valid_jobs)
+            logger.info(
+                "attempt %d added %d valid jobs, daily progress %d/%d",
+                attempt_no,
+                new_valid_jobs,
+                daily_valid_jobs,
+                daily_target_valid_jobs,
+            )
+
+            if daily_valid_jobs >= daily_target_valid_jobs:
+                break
+            if crawl_interval_seconds > 0 and attempts_this_run < max_crawl_attempts_per_run:
+                time.sleep(crawl_interval_seconds)
+
+        final_daily_stats = store.daily_stats(run_date)
+        stats = store.stats()
+        stats.update(
+            {
+                "daily_date": run_date,
+                "daily_attempts": final_daily_stats["attempts"],
+                "daily_max_attempts": max_daily_crawl_attempts,
+                "daily_valid_jobs": final_daily_stats["valid_jobs"],
+                "daily_target_valid_jobs": daily_target_valid_jobs,
+                "attempts_this_run": attempts_this_run,
+            }
+        )
+
+        generated_at = datetime.now(report_tz)
+        report = build_markdown_report(analyzed_jobs, generated_at, config, stats)
         report_path = write_report(app_config.get("report_dir", "reports"), report)
         logger.info("report written to %s", report_path)
 

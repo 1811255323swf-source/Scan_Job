@@ -4,6 +4,11 @@ app:
   min_score: 50
   max_jobs_per_run: 30
   max_ai_jobs_per_run: 3
+  daily_timezone: Asia/Shanghai
+  daily_target_valid_jobs: 10
+  max_daily_crawl_attempts: 200
+  max_crawl_attempts_per_run: 200
+  crawl_interval_seconds: 0
   request_timeout_seconds: 8
   send_empty_report: true
 

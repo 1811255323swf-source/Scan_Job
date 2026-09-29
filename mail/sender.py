@@ -25,8 +25,18 @@ def build_markdown_report(
         "# C++后端实习机会",
         "",
         f"- 生成时间：{generated_at.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- 统计日期：{stats.get('daily_date', generated_at.strftime('%Y-%m-%d'))}",
         f"- 新增推荐：{len(analyzed_jobs)} 个",
         f"- 历史岗位：{stats.get('total_jobs', 0)} 个",
+        (
+            "- 今日累计有效岗位："
+            f"{stats.get('daily_valid_jobs', 0)} / {stats.get('daily_target_valid_jobs', 10)} 个"
+        ),
+        (
+            "- 今日累计爬取轮次："
+            f"{stats.get('daily_attempts', 0)} / {stats.get('daily_max_attempts', 200)} 次"
+        ),
+        f"- 本次爬取轮次：{stats.get('attempts_this_run', 0)} 次",
         "",
     ]
 

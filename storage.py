@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS jobs(
 
 CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score);
 CREATE INDEX IF NOT EXISTS idx_jobs_create_time ON jobs(create_time);
+
+CREATE TABLE IF NOT EXISTS daily_crawl_stats(
+    run_date TEXT PRIMARY KEY,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    valid_jobs INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME
+);
 """
 
 
@@ -97,6 +104,53 @@ class JobStore:
             return True
         except sqlite3.IntegrityError:
             return False
+
+    def daily_stats(self, run_date: str) -> dict[str, int]:
+        cursor = self.connection.execute(
+            """
+            SELECT attempts, valid_jobs
+            FROM daily_crawl_stats
+            WHERE run_date = ?
+            """,
+            (run_date,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return {"attempts": 0, "valid_jobs": 0}
+        return {"attempts": int(row["attempts"]), "valid_jobs": int(row["valid_jobs"])}
+
+    def add_daily_attempt(self, run_date: str) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        self.connection.execute(
+            """
+            INSERT INTO daily_crawl_stats(run_date, attempts, valid_jobs, updated_at)
+            VALUES (?, 1, 0, ?)
+            ON CONFLICT(run_date) DO UPDATE SET
+                attempts = attempts + 1,
+                updated_at = excluded.updated_at
+            """,
+            (run_date, now),
+        )
+        self.connection.commit()
+        return self.daily_stats(run_date)["attempts"]
+
+    def add_daily_valid_jobs(self, run_date: str, amount: int) -> int:
+        if amount <= 0:
+            return self.daily_stats(run_date)["valid_jobs"]
+
+        now = datetime.now(timezone.utc).isoformat()
+        self.connection.execute(
+            """
+            INSERT INTO daily_crawl_stats(run_date, attempts, valid_jobs, updated_at)
+            VALUES (?, 0, ?, ?)
+            ON CONFLICT(run_date) DO UPDATE SET
+                valid_jobs = valid_jobs + excluded.valid_jobs,
+                updated_at = excluded.updated_at
+            """,
+            (run_date, amount, now),
+        )
+        self.connection.commit()
+        return self.daily_stats(run_date)["valid_jobs"]
 
     def stats(self) -> dict[str, Any]:
         cursor = self.connection.execute("SELECT COUNT(*) AS total FROM jobs")
