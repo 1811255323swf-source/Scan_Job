@@ -80,8 +80,12 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
     ai_count = 0
 
     try:
-        crawlers = build_crawlers(config)
-        logger.info("enabled crawlers: %s", ", ".join(crawler.name for crawler in crawlers) or "none")
+        if force_email:
+            crawlers = []
+            logger.info("force-email requested; skip crawling and send the current report")
+        else:
+            crawlers = build_crawlers(config)
+            logger.info("enabled crawlers: %s", ", ".join(crawler.name for crawler in crawlers) or "none")
 
         generated_at = datetime.now(report_tz)
         run_date = generated_at.strftime("%Y-%m-%d")

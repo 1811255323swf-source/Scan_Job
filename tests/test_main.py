@@ -164,10 +164,12 @@ def test_run_sends_email_after_daily_attempt_limit(monkeypatch, tmp_path):
 
 
 def test_run_force_sends_email_before_daily_completion(monkeypatch, tmp_path):
-    crawler = FakeCrawler([[]])
     sent_messages = []
 
-    monkeypatch.setattr(monitor, "build_crawlers", lambda config: [crawler])
+    def fail_build_crawlers(config):
+        raise AssertionError("force-email should not crawl")
+
+    monkeypatch.setattr(monitor, "build_crawlers", fail_build_crawlers)
     monkeypatch.setattr(monitor, "send_email", lambda subject, report, config: sent_messages.append(subject) or True)
 
     config = base_config(tmp_path, target=10, max_attempts=200, per_run_attempts=1)
