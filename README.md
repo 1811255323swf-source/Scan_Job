@@ -44,7 +44,7 @@ GitHub Actions 不能作为 24 小时常驻进程使用，但这种定时唤醒�
 | `AI_MODEL` | `deepseek-v4-flash` | AI 分析模型 |
 | `AI_BASE_URL` | `https://api.deepseek.com` | DeepSeek/OpenAI-compatible 服务地址 |
 
-如果没有配置邮件 Secrets，程序仍会生成 `reports/latest.md`，但不会发送邮件。
+云端 workflow 会强制检查邮件 Secrets，并使用 `--require-email`。如果邮件配置缺失或发送失败，本次 Actions 会失败，避免出现“显示成功但其实没发邮件”的情况。
 
 ## 邮箱推送配置
 
@@ -116,6 +116,12 @@ sources:
 python -m pip install -r requirements.txt
 python -m pytest
 python main.py --no-email
+```
+
+云端同款邮件强制检查：
+
+```bash
+python main.py --config config.yaml --require-email
 ```
 
 ## 目录结构

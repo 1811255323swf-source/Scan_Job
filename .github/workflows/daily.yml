@@ -54,8 +54,47 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Validate email secrets
+        shell: bash
+        run: |
+          missing=0
+          for name in SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD EMAIL_FROM EMAIL_TO; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub secret: $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Run cloud monitor
-        run: python main.py --config config.yaml
+        shell: bash
+        run: |
+          set -o pipefail
+          python main.py --config config.yaml --require-email 2>&1 | tee run.log
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Cloud Job Monitor"
+            echo ""
+            echo "- Event: \`${{ github.event_name }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo ""
+            if [ -f reports/latest.md ]; then
+              echo "### Latest report"
+              echo ""
+              cat reports/latest.md
+              echo ""
+            fi
+            echo "<details><summary>Run log</summary>"
+            echo ""
+            echo '```text'
+            cat run.log 2>/dev/null || echo "No run.log was produced."
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload latest report
         uses: actions/upload-artifact@v4

@@ -17,6 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="C++ backend internship cloud monitor")
     parser.add_argument("--config", default="config.yaml", help="Path to config YAML")
     parser.add_argument("--no-email", action="store_true", help="Generate report without sending email")
+    parser.add_argument(
+        "--require-email",
+        action="store_true",
+        help="Fail the run if email is skipped or cannot be sent.",
+    )
     return parser.parse_args()
 
 
@@ -39,7 +44,7 @@ def unique_jobs(jobs: list[Job]) -> list[Job]:
     return result
 
 
-def run(config: dict, no_email: bool = False) -> int:
+def run(config: dict, no_email: bool = False, require_email: bool = False) -> int:
     logger = logging.getLogger("main")
     app_config = config.get("app", {})
     min_score = int(app_config.get("min_score", 50))
@@ -100,12 +105,22 @@ def run(config: dict, no_email: bool = False) -> int:
         logger.info("report written to %s", report_path)
 
         send_empty_report = as_bool(app_config.get("send_empty_report", True))
+        email_sent = False
         if no_email:
             logger.info("email skipped by --no-email")
+            if require_email:
+                logger.error("--require-email cannot be used together with --no-email")
+                return 2
         elif analyzed_jobs or send_empty_report:
             subject_prefix = config.get("email", {}).get("subject_prefix", "C++后端实习机会")
             subject = f"{subject_prefix} - {generated_at.strftime('%Y-%m-%d')}"
-            send_email(subject, report, config)
+            email_sent = send_email(subject, report, config)
+        else:
+            logger.info("email skipped because report is empty and send_empty_report=false")
+
+        if require_email and not email_sent:
+            logger.error("email was required but was not sent")
+            return 2
 
         logger.info("new recommended jobs: %d", len(analyzed_jobs))
         return 0
@@ -117,7 +132,7 @@ def main() -> int:
     args = parse_args()
     setup_logging()
     config = load_config(Path(args.config))
-    return run(config, no_email=args.no_email)
+    return run(config, no_email=args.no_email, require_email=args.require_email)
 
 
 if __name__ == "__main__":
