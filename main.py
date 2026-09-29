@@ -11,7 +11,7 @@ from analyzer import AIAnalyzer, score_job
 from crawler import build_crawlers
 from mail.sender import build_markdown_report, send_email, write_report
 from models import AnalyzedJob, Job
-from settings import as_bool, load_config
+from settings import load_config
 from storage import JobStore
 
 
@@ -180,6 +180,10 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
                 time.sleep(crawl_interval_seconds)
 
         final_daily_stats = store.daily_stats(run_date)
+        daily_complete = (
+            final_daily_stats["valid_jobs"] >= daily_target_valid_jobs
+            or final_daily_stats["attempts"] >= max_daily_crawl_attempts
+        )
         stats = store.stats()
         stats.update(
             {
@@ -189,6 +193,7 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
                 "daily_valid_jobs": final_daily_stats["valid_jobs"],
                 "daily_target_valid_jobs": daily_target_valid_jobs,
                 "attempts_this_run": attempts_this_run,
+                "daily_complete": daily_complete,
             }
         )
 
@@ -197,21 +202,26 @@ def run(config: dict, no_email: bool = False, require_email: bool = False) -> in
         report_path = write_report(app_config.get("report_dir", "reports"), report)
         logger.info("report written to %s", report_path)
 
-        send_empty_report = as_bool(app_config.get("send_empty_report", True))
         email_sent = False
         if no_email:
             logger.info("email skipped by --no-email")
-            if require_email:
-                logger.error("--require-email cannot be used together with --no-email")
+            if require_email and daily_complete:
+                logger.error("--require-email cannot be used with --no-email after the daily crawl is complete")
                 return 2
-        elif analyzed_jobs or send_empty_report:
+        elif daily_complete:
             subject_prefix = config.get("email", {}).get("subject_prefix", "C++后端实习机会")
             subject = f"{subject_prefix} - {generated_at.strftime('%Y-%m-%d')}"
             email_sent = send_email(subject, report, config)
         else:
-            logger.info("email skipped because report is empty and send_empty_report=false")
+            logger.info(
+                "email postponed until daily completion: %d/%d valid jobs, %d/%d attempts",
+                final_daily_stats["valid_jobs"],
+                daily_target_valid_jobs,
+                final_daily_stats["attempts"],
+                max_daily_crawl_attempts,
+            )
 
-        if require_email and not email_sent:
+        if require_email and daily_complete and not email_sent:
             logger.error("email was required but was not sent")
             return 2
 

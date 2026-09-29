@@ -37,6 +37,7 @@ def build_markdown_report(
             f"{stats.get('daily_attempts', 0)} / {stats.get('daily_max_attempts', 200)} 次"
         ),
         f"- 本次爬取轮次：{stats.get('attempts_this_run', 0)} 次",
+        f"- 邮件发送条件：{'已满足' if stats.get('daily_complete') else '未满足，继续爬取'}",
         "",
     ]
 
