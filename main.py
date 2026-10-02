@@ -137,7 +137,7 @@ def run(
                     daily_target_valid_jobs,
                 )
                 break
-            if daily_attempts >= max_daily_crawl_attempts:
+            if daily_attempts >= max_daily_crawl_attempts and not force_email:
                 logger.info(
                     "daily crawl limit reached: %d/%d attempts",
                     daily_attempts,
