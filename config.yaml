@@ -1,7 +1,7 @@
 app:
   database_path: database/jobs.db
   report_dir: reports
-  min_score: 35
+  min_score: 30
   max_jobs_per_run: 30
   max_ai_jobs_per_run: 5
   daily_timezone: Asia/Shanghai

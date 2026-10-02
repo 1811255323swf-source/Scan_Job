@@ -44,7 +44,7 @@ GitHub Actions 的定时任务可能比 13:00 延迟几分钟，这是 GitHub �
 ```yaml
 app:
   daily_timezone: Asia/Shanghai
-  min_score: 35
+  min_score: 30
   daily_target_valid_jobs: 10
   max_daily_crawl_attempts: 1
   max_crawl_attempts_per_run: 1
