@@ -29,7 +29,6 @@ def score_job(job: Job, config: dict) -> ScoreResult:
     negative_keywords = keywords.get("negative", [])
     matched_positive = _contains_any(text, positive_keywords)
     negative_in_position = _contains_any(position_text, negative_keywords)
-    negative_in_text = _contains_any(text, negative_keywords)
 
     score = 0
     matched_rules: list[str] = []
@@ -67,10 +66,10 @@ def score_job(job: Job, config: dict) -> ScoreResult:
         score += value
         penalties.append(f"缺少目标方向关键词 {value}")
 
-    if negative_in_text:
+    if negative_in_position:
         value = int(scoring.get("negative_keyword_penalty", -30))
         score += value
-        penalties.append(f"包含排除关键词({','.join(negative_in_text)}) {value}")
+        penalties.append(f"岗位名称包含排除关键词({','.join(negative_in_position)}) {value}")
 
     conflict_terms = ["全职", "一年以上", "12个月", "每周5天", "立即到岗长期"]
     if _contains_any(text, conflict_terms):
@@ -87,4 +86,3 @@ def score_job(job: Job, config: dict) -> ScoreResult:
         penalties=penalties,
         excluded=excluded,
     )
-

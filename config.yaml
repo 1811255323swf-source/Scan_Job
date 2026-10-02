@@ -1,13 +1,13 @@
 app:
   database_path: database/jobs.db
   report_dir: reports
-  min_score: 50
+  min_score: 35
   max_jobs_per_run: 30
-  max_ai_jobs_per_run: 3
+  max_ai_jobs_per_run: 5
   daily_timezone: Asia/Shanghai
   daily_target_valid_jobs: 10
-  max_daily_crawl_attempts: 200
-  max_crawl_attempts_per_run: 200
+  max_daily_crawl_attempts: 1
+  max_crawl_attempts_per_run: 1
   crawl_interval_seconds: 0
   request_timeout_seconds: 8
   send_empty_report: true
@@ -19,6 +19,15 @@ user_profile:
   target_locations:
     - 武汉
     - 远程
+    - 北京
+    - 上海
+    - 深圳
+    - 杭州
+    - 广州
+    - 南京
+    - 成都
+    - 西安
+    - 苏州
   skills:
     - C++
     - Python
@@ -93,7 +102,7 @@ scoring:
   location_score: 15
   graduation_score: 10
   non_target_penalty: -30
-  internship_conflict_penalty: -10
+  internship_conflict_penalty: 0
   negative_keyword_penalty: -30
 
 ai:
@@ -125,7 +134,7 @@ sources:
       - 网络编程 实习
     locations:
       - 武汉
-    max_pages: 1
+    max_pages: 2
 
   - name: shixiseng
     type: shixiseng
@@ -136,7 +145,16 @@ sources:
       - 网络通信
     locations:
       - 武汉
-    max_pages: 1
+      - 北京
+      - 上海
+      - 深圳
+      - 杭州
+      - 广州
+      - 南京
+      - 成都
+      - 西安
+      - 苏州
+    max_pages: 2
 
   - name: yingjiesheng
     type: yingjiesheng
@@ -144,7 +162,7 @@ sources:
     keywords:
       - C++ 后端 实习
       - Linux 实习
-    max_pages: 1
+    max_pages: 2
 
   - name: company_pages
     type: generic

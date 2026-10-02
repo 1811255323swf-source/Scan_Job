@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from models import Job, ScoreResult
+from models import AnalyzedJob, Job, ScoreResult
 
 
 SCHEMA = """
@@ -157,3 +157,50 @@ class JobStore:
         total = cursor.fetchone()["total"]
         return {"total_jobs": total}
 
+    def jobs_created_between(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 100,
+    ) -> list[AnalyzedJob]:
+        """Return jobs inserted in a UTC time window for daily report retries."""
+        cursor = self.connection.execute(
+            """
+            SELECT company, position, location, published_at, education,
+                   graduation_year, internship_period, description, requirements,
+                   source, url, score, level, score_detail, ai_analysis
+            FROM jobs
+            WHERE create_time >= ? AND create_time < ?
+            ORDER BY score DESC, create_time DESC
+            LIMIT ?
+            """,
+            (start_time.astimezone(timezone.utc).isoformat(), end_time.astimezone(timezone.utc).isoformat(), limit),
+        )
+
+        result: list[AnalyzedJob] = []
+        for row in cursor.fetchall():
+            detail = json.loads(row["score_detail"] or "{}")
+            job = Job(
+                source=row["source"],
+                company=row["company"],
+                position=row["position"],
+                location=row["location"],
+                published_at=row["published_at"],
+                education=row["education"],
+                graduation_year=row["graduation_year"],
+                internship_period=row["internship_period"],
+                description=row["description"],
+                requirements=row["requirements"],
+                url=row["url"],
+            )
+            result.append(
+                AnalyzedJob(
+                    job=job,
+                    score=int(row["score"]),
+                    level=row["level"],
+                    matched_rules=list(detail.get("matched_rules", [])),
+                    penalties=list(detail.get("penalties", [])),
+                    ai_analysis=row["ai_analysis"] or "",
+                )
+            )
+        return result

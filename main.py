@@ -27,7 +27,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--force-email",
         action="store_true",
-        help="Send the current report even if the daily crawl target is not complete.",
+        help="Crawl and send today's accumulated report even if the daily target is not complete.",
+    )
+    parser.add_argument(
+        "--email-only",
+        action="store_true",
+        help="Resend reports/latest.md without crawling.",
     )
     return parser.parse_args()
 
@@ -70,7 +75,13 @@ def write_email_sent_flag(report_dir: str | Path, run_date: str) -> Path:
     return flag_path
 
 
-def run(config: dict, no_email: bool = False, require_email: bool = False, force_email: bool = False) -> int:
+def run(
+    config: dict,
+    no_email: bool = False,
+    require_email: bool = False,
+    force_email: bool = False,
+    email_only: bool = False,
+) -> int:
     logger = logging.getLogger("main")
     app_config = config.get("app", {})
     min_score = int(app_config.get("min_score", 50))
@@ -88,15 +99,27 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
     ai_count = 0
 
     try:
-        if force_email:
+        generated_at = datetime.now(report_tz)
+        run_date = generated_at.strftime("%Y-%m-%d")
+
+        if email_only:
             crawlers = []
-            logger.info("force-email requested; skip crawling and send the current report")
+            report_path = Path(app_config.get("report_dir", "reports")) / "latest.md"
+            if not report_path.is_file():
+                logger.error("cannot resend email: %s does not exist", report_path)
+                return 2
+            report = report_path.read_text(encoding="utf-8")
+            subject_prefix = config.get("email", {}).get("subject_prefix", "C++后端实习机会")
+            subject = f"{subject_prefix} - {run_date}（补发）"
+            email_sent = False if no_email else send_email(subject, report, config)
+            if email_sent:
+                write_email_sent_flag(app_config.get("report_dir", "reports"), run_date)
+                logger.info("latest report resent successfully")
+                return 0
+            return 2 if require_email else 0
         else:
             crawlers = build_crawlers(config)
             logger.info("enabled crawlers: %s", ", ".join(crawler.name for crawler in crawlers) or "none")
-
-        generated_at = datetime.now(report_tz)
-        run_date = generated_at.strftime("%Y-%m-%d")
         attempts_this_run = 0
 
         if not crawlers:
@@ -150,11 +173,28 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
             logger.info("attempt %d unique fetched jobs: %d", attempt_no, len(crawled_jobs))
 
             new_valid_jobs = 0
+            excluded_jobs = 0
+            below_score_jobs = 0
+            duplicate_jobs = 0
+            sample_rejections: list[str] = []
             for job in crawled_jobs:
                 score_result = score_job(job, config)
-                if score_result.excluded or score_result.score < min_score:
+                if score_result.excluded:
+                    excluded_jobs += 1
+                    if len(sample_rejections) < 5:
+                        sample_rejections.append(
+                            f"excluded score={score_result.score} title={job.position[:80]}"
+                        )
+                    continue
+                if score_result.score < min_score:
+                    below_score_jobs += 1
+                    if len(sample_rejections) < 5:
+                        sample_rejections.append(
+                            f"below-score score={score_result.score} title={job.position[:80]}"
+                        )
                     continue
                 if store.seen(job):
+                    duplicate_jobs += 1
                     continue
 
                 if analyzer.enabled() and ai_count < max_ai_jobs:
@@ -190,6 +230,16 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
                 daily_valid_jobs,
                 daily_target_valid_jobs,
             )
+            logger.info(
+                "attempt %d filter summary: excluded=%d below_score=%d duplicates=%d added=%d",
+                attempt_no,
+                excluded_jobs,
+                below_score_jobs,
+                duplicate_jobs,
+                new_valid_jobs,
+            )
+            for rejection in sample_rejections:
+                logger.info("filter sample: %s", rejection)
 
             if daily_valid_jobs >= daily_target_valid_jobs:
                 break
@@ -215,7 +265,19 @@ def run(config: dict, no_email: bool = False, require_email: bool = False, force
         )
 
         generated_at = datetime.now(report_tz)
-        report = build_markdown_report(analyzed_jobs, generated_at, config, stats)
+        day_start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        daily_jobs = store.jobs_created_between(day_start, day_end, limit=max_jobs)
+        target_locations = list(config.get("user_profile", {}).get("target_locations", []))
+
+        def location_rank(analyzed: AnalyzedJob) -> int:
+            for index, location in enumerate(target_locations):
+                if location and location in analyzed.job.location:
+                    return index
+            return len(target_locations)
+
+        daily_jobs.sort(key=lambda item: (location_rank(item), -item.score))
+        report = build_markdown_report(daily_jobs, generated_at, config, stats)
         report_path = write_report(app_config.get("report_dir", "reports"), report)
         logger.info("report written to %s", report_path)
 
@@ -255,9 +317,14 @@ def main() -> int:
     args = parse_args()
     setup_logging()
     config = load_config(Path(args.config))
-    return run(config, no_email=args.no_email, require_email=args.require_email, force_email=args.force_email)
+    return run(
+        config,
+        no_email=args.no_email,
+        require_email=args.require_email,
+        force_email=args.force_email,
+        email_only=args.email_only,
+    )
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

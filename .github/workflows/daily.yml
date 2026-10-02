@@ -2,27 +2,34 @@ name: Cloud Job Monitor
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Run mode
+        required: true
+        default: scan_only
+        type: choice
+        options:
+          - scan_only
+          - scan_and_email
+          - resend_latest
   push:
     branches:
       - main
   schedule:
-    # GitHub Actions cron uses UTC. These retries cover 18:03-18:45 Asia/Shanghai.
-    - cron: "3 10 * * *"
-    - cron: "17 10 * * *"
-    - cron: "31 10 * * *"
-    - cron: "45 10 * * *"
+    # GitHub Actions cron uses UTC. 05:00 UTC is 13:00 Asia/Shanghai.
+    - cron: "0 5 * * *"
 
 permissions:
   contents: write
 
 concurrency:
-  group: cloud-job-monitor
-  cancel-in-progress: true
+  group: cloud-job-monitor-main
+  cancel-in-progress: false
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 60
 
     env:
       PYTHONUTF8: "1"
@@ -35,6 +42,8 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
       SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USE_SSL: ${{ secrets.SMTP_USE_SSL }}
+      SMTP_STARTTLS: ${{ secrets.SMTP_STARTTLS }}
       SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
@@ -49,18 +58,31 @@ jobs:
       - name: Resolve run mode
         id: run-mode
         shell: bash
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           run_date="$(TZ=Asia/Shanghai date +%F)"
           marker=".github/state/job-email-sent/${run_date}"
-          send_requested="false"
+          mode="test_only"
           should_run="true"
+          send_requested="false"
           reason="ready"
 
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ contains(github.event.head_commit.message, '[send-now]') }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            mode="scan_and_email"
+            send_requested="true"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            mode="${DISPATCH_MODE:-scan_only}"
+            case "$mode" in
+              scan_and_email|resend_latest) send_requested="true" ;;
+            esac
+          elif [[ "$COMMIT_MESSAGE" == *"[send-now]"* ]]; then
+            mode="scan_and_email"
             send_requested="true"
           fi
 
-          if [ "$send_requested" = "true" ] && [ -f "$marker" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$marker" ]; then
             should_run="false"
             reason="already sent for ${run_date}"
             echo "$reason"
@@ -68,6 +90,7 @@ jobs:
 
           echo "run_date=$run_date" >> "$GITHUB_OUTPUT"
           echo "marker=$marker" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "send_requested=$send_requested" >> "$GITHUB_OUTPUT"
           echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
@@ -88,7 +111,7 @@ jobs:
         run: python -m pytest
 
       - name: Validate email secrets
-        if: steps.run-mode.outputs.should_run == 'true'
+        if: steps.run-mode.outputs.should_run == 'true' && steps.run-mode.outputs.send_requested == 'true'
         shell: bash
         run: |
           missing=0
@@ -101,17 +124,21 @@ jobs:
           exit "$missing"
 
       - name: Run cloud monitor
-        if: steps.run-mode.outputs.should_run == 'true' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[send-now]'))
+        if: steps.run-mode.outputs.should_run == 'true' && steps.run-mode.outputs.mode != 'test_only'
         shell: bash
         run: |
           set -o pipefail
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            python main.py --config config.yaml --require-email 2>&1 | tee run.log
-          elif [ "${{ contains(github.event.head_commit.message, '[send-now]') }}" = "true" ]; then
-            python main.py --config config.yaml --force-email --require-email 2>&1 | tee run.log
-          else
-            python main.py --config config.yaml --no-email 2>&1 | tee run.log
-          fi
+          case "${{ steps.run-mode.outputs.mode }}" in
+            scan_and_email)
+              python main.py --config config.yaml --force-email --require-email 2>&1 | tee run.log
+              ;;
+            resend_latest)
+              python main.py --config config.yaml --email-only --require-email 2>&1 | tee run.log
+              ;;
+            *)
+              python main.py --config config.yaml --no-email 2>&1 | tee run.log
+              ;;
+          esac
 
       - name: Mark email sent
         if: success() && steps.run-mode.outputs.send_requested == 'true' && steps.run-mode.outputs.should_run == 'true'
@@ -119,8 +146,8 @@ jobs:
         run: |
           sent_flag="reports/email_sent_${{ steps.run-mode.outputs.run_date }}.flag"
           if [ ! -f "$sent_flag" ]; then
-            echo "No email sent flag found at $sent_flag; do not mark the day as sent."
-            exit 0
+            echo "::error::No email sent flag found at $sent_flag"
+            exit 1
           fi
 
           mkdir -p "$(dirname "${{ steps.run-mode.outputs.marker }}")"
@@ -134,20 +161,15 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [ "${{ steps.run-mode.outputs.should_run }}" != "true" ]; then
-            {
-              echo "## Cloud Job Monitor"
-              echo ""
-              echo "Skipped: ${{ steps.run-mode.outputs.reason }}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
           {
             echo "## Cloud Job Monitor"
             echo ""
             echo "- Event: \`${{ github.event_name }}\`"
+            echo "- Mode: \`${{ steps.run-mode.outputs.mode }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
+            if [ "${{ steps.run-mode.outputs.should_run }}" != "true" ]; then
+              echo "- Skipped: ${{ steps.run-mode.outputs.reason }}"
+            fi
             echo ""
             if [ -f reports/latest.md ]; then
               echo "### Latest report"
@@ -158,7 +180,7 @@ jobs:
             echo "<details><summary>Run log</summary>"
             echo ""
             echo '```text'
-            cat run.log 2>/dev/null || echo "No run.log was produced."
+            cat run.log 2>/dev/null || echo "No monitor run was requested."
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -172,11 +194,23 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit monitor state
-        if: steps.run-mode.outputs.should_run == 'true' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[send-now]'))
+        if: success() && steps.run-mode.outputs.should_run == 'true' && steps.run-mode.outputs.mode != 'test_only'
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add database/jobs.db reports/latest.md reports/email_sent_*.flag .github/state/job-email-sent/
+
+          paths=()
+          for path in database/jobs.db reports/latest.md .github/state/job-email-sent; do
+            [ -e "$path" ] && paths+=("$path")
+          done
+          shopt -s nullglob
+          flags=(reports/email_sent_*.flag)
+          paths+=("${flags[@]}")
+
+          if [ "${#paths[@]}" -gt 0 ]; then
+            git add -- "${paths[@]}"
+          fi
           if ! git diff --cached --quiet; then
             git commit -m "chore: update job monitor state [skip ci]"
             git pull --rebase
@@ -184,4 +218,3 @@ jobs:
           else
             echo "No monitor state changes to commit."
           fi
-

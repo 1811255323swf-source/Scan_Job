@@ -167,18 +167,53 @@ def test_run_sends_email_after_daily_attempt_limit(monkeypatch, tmp_path):
     assert (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
 
 
-def test_run_force_sends_email_before_daily_completion(monkeypatch, tmp_path):
+def test_run_force_crawls_and_sends_email_before_daily_completion(monkeypatch, tmp_path):
     sent_messages = []
+    crawler = FakeCrawler(
+        [[
+            Job(
+                source="fake",
+                company="A",
+                position="C++ 后端实习",
+                location="武汉",
+                requirements="Linux Socket",
+                url="https://example.com/a",
+            )
+        ]]
+    )
 
-    def fail_build_crawlers(config):
-        raise AssertionError("force-email should not crawl")
-
-    monkeypatch.setattr(monitor, "build_crawlers", fail_build_crawlers)
-    monkeypatch.setattr(monitor, "send_email", lambda subject, report, config: sent_messages.append(subject) or True)
+    monkeypatch.setattr(monitor, "build_crawlers", lambda config: [crawler])
+    monkeypatch.setattr(
+        monitor,
+        "send_email",
+        lambda subject, report, config: sent_messages.append((subject, report)) or True,
+    )
 
     config = base_config(tmp_path, target=10, max_attempts=200, per_run_attempts=1)
 
     assert monitor.run(config, require_email=True, force_email=True) == 0
     run_date = datetime.now(monitor.configured_timezone("Asia/Shanghai")).strftime("%Y-%m-%d")
-    assert sent_messages == [f"test - {run_date}"]
+    assert sent_messages[0][0] == f"test - {run_date}"
+    assert "A - C++ 后端实习" in sent_messages[0][1]
     assert (tmp_path / "reports" / f"email_sent_{run_date}.flag").exists()
+
+
+def test_email_only_resends_existing_report_without_crawling(monkeypatch, tmp_path):
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir()
+    (report_dir / "latest.md").write_text("existing daily report", encoding="utf-8")
+    sent_messages = []
+
+    def fail_build_crawlers(config):
+        raise AssertionError("email-only should not crawl")
+
+    monkeypatch.setattr(monitor, "build_crawlers", fail_build_crawlers)
+    monkeypatch.setattr(
+        monitor,
+        "send_email",
+        lambda subject, report, config: sent_messages.append((subject, report)) or True,
+    )
+
+    config = base_config(tmp_path)
+    assert monitor.run(config, require_email=True, email_only=True) == 0
+    assert sent_messages[0][1] == "existing daily report"
