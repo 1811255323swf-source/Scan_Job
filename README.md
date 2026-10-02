@@ -2,7 +2,7 @@
 
 面向 C++ 后端、Linux 服务端、网络通信、基础架构、系统开发和嵌入式网络通信方向的实习岗位监控程序。
 
-系统通过 GitHub Actions 每天抓取岗位，按关键词评分，使用 SQLite 去重，可选调用 AI 生成匹配分析，并通过 SMTP 发送当天累计报告。
+系统通过 GitHub Actions 每天抓取岗位，按关键词评分，在本次运行的 SQLite 中生成报告，可选调用 AI 分析，并通过 SMTP 发送邮件。跨运行只保存岗位链接的 SHA-256 哈希用于去重，不在公开仓库提交岗位正文、个性化分析或邮箱内容。
 
 ## 自动运行
 
@@ -12,6 +12,7 @@
 - 普通 push 只安装依赖、执行测试和检查 workflow，不抓取、不发送邮件
 - 提交信息包含 `[send-now]` 时，会立即抓取并发送邮件
 - workflow 并发任务排队执行，不会由后续触发取消正在运行的扫描
+- 日报正文作为 Actions artifact 保留 7 天，不提交到仓库
 
 GitHub Actions 的定时任务可能比 13:00 延迟几分钟，这是 GitHub 调度机制导致的正常现象。
 
@@ -21,9 +22,8 @@ GitHub Actions 的定时任务可能比 13:00 延迟几分钟，这是 GitHub �
 
 | 模式 | 行为 |
 | --- | --- |
-| `scan_only` | 抓取并更新数据库和报告，不发邮件 |
-| `scan_and_email` | 抓取后发送当天累计报告 |
-| `resend_latest` | 不抓取，直接补发 `reports/latest.md` |
+| `scan_only` | 抓取并生成 Actions 报告，不发邮件 |
+| `scan_and_email` | 抓取后发送当天报告 |
 
 ## 当前爬取来源
 
@@ -52,7 +52,7 @@ app:
 
 一次运行会完整抓取当前启用来源。相同搜索页在短时间内通常不会产生新结果，因此每天只抓取一轮，避免旧版本连续请求同一页面 200 次。
 
-`daily_target_valid_jobs` 仍用于展示目标进度；定时任务使用 `--force-email`，因此完成当天这一轮后就会发送邮件，不再等待凑满 10 个岗位。数据库按链接去重，邮件从数据库重新读取当天累计岗位，所以 SMTP 失败后重试不会得到空报告。
+`daily_target_valid_jobs` 仍用于展示目标进度；定时任务使用 `--force-email`，因此完成当天这一轮后就会发送邮件，不再等待凑满 10 个岗位。`database/seen_hashes.txt` 只保存岗位链接哈希，用于跨运行去重。SMTP 失败时不会提交本次哈希，下一次运行仍会重新抓取并尝试发送。
 
 武汉和远程岗位在报告中优先，其后是接受的其他城市。岗位必须命中 C++、Linux、Socket、服务端、基础架构或嵌入式等核心方向；只有“Java/Go 后端”而没有这些核心词的岗位会被排除。实习时长不会导致岗位被过滤。
 
@@ -127,12 +127,6 @@ python main.py --config config.yaml --no-email
 
 ```bash
 python main.py --config config.yaml --force-email --require-email
-```
-
-补发已有日报：
-
-```bash
-python main.py --config config.yaml --email-only --require-email
 ```
 
 ## 目录结构

@@ -93,7 +93,10 @@ def run(
     crawl_interval_seconds = float(app_config.get("crawl_interval_seconds", 0))
     report_tz = configured_timezone(str(app_config.get("daily_timezone", "Asia/Shanghai")))
 
-    store = JobStore(app_config.get("database_path", "database/jobs.db"))
+    store = JobStore(
+        app_config.get("database_path", "database/jobs.db"),
+        app_config.get("seen_hashes_path"),
+    )
     analyzer = AIAnalyzer(config)
     analyzed_jobs: list[AnalyzedJob] = []
     ai_count = 0

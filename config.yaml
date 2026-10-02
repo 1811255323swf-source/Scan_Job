@@ -1,5 +1,6 @@
 app:
   database_path: database/jobs.db
+  seen_hashes_path: database/seen_hashes.txt
   report_dir: reports
   min_score: 30
   max_jobs_per_run: 30
@@ -84,7 +85,11 @@ keywords:
     - 嵌入式
     - 网络通信
   negative:
-    - 游戏客户端
+    - 游戏
+    - 客户端
+    - 教师
+    - 讲师
+    - 高级
     - Unity
     - 前端
     - 测试

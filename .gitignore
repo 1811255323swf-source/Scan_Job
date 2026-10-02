@@ -12,3 +12,8 @@ venv/
 !.env.example
 *.log
 
+
+# Generated monitor data; only URL hashes are persisted.
+database/jobs.db
+reports/latest.md
+reports/email_sent_*.flag

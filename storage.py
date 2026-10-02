@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -43,9 +44,17 @@ CREATE TABLE IF NOT EXISTS daily_crawl_stats(
 
 
 class JobStore:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(self, database_path: str | Path, seen_hashes_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.seen_hashes_path = Path(seen_hashes_path) if seen_hashes_path else None
+        self.seen_hashes: set[str] = set()
+        if self.seen_hashes_path and self.seen_hashes_path.is_file():
+            self.seen_hashes = {
+                line.strip()
+                for line in self.seen_hashes_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            }
         self.connection = sqlite3.connect(self.database_path)
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(SCHEMA)
@@ -55,6 +64,8 @@ class JobStore:
         self.connection.close()
 
     def seen(self, job: Job) -> bool:
+        if self._seen_hash(job) in self.seen_hashes:
+            return True
         cursor = self.connection.execute(
             "SELECT 1 FROM jobs WHERE url = ? LIMIT 1",
             (job.dedupe_key,),
@@ -101,9 +112,25 @@ class JobStore:
                 ),
             )
             self.connection.commit()
+            self._remember_seen(job)
             return True
         except sqlite3.IntegrityError:
             return False
+
+    @staticmethod
+    def _seen_hash(job: Job) -> str:
+        return sha256(job.dedupe_key.encode("utf-8")).hexdigest()
+
+    def _remember_seen(self, job: Job) -> None:
+        if self.seen_hashes_path is None:
+            return
+        digest = self._seen_hash(job)
+        if digest in self.seen_hashes:
+            return
+        self.seen_hashes.add(digest)
+        self.seen_hashes_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.seen_hashes_path.open("a", encoding="utf-8") as file:
+            file.write(f"{digest}\n")
 
     def daily_stats(self, run_date: str) -> dict[str, int]:
         cursor = self.connection.execute(

@@ -11,7 +11,6 @@ on:
         options:
           - scan_only
           - scan_and_email
-          - resend_latest
   push:
     branches:
       - main
@@ -75,7 +74,7 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             mode="${DISPATCH_MODE:-scan_only}"
             case "$mode" in
-              scan_and_email|resend_latest) send_requested="true" ;;
+              scan_and_email) send_requested="true" ;;
             esac
           elif [[ "$COMMIT_MESSAGE" == *"[send-now]"* ]]; then
             mode="scan_and_email"
@@ -131,9 +130,6 @@ jobs:
           case "${{ steps.run-mode.outputs.mode }}" in
             scan_and_email)
               python main.py --config config.yaml --force-email --require-email 2>&1 | tee run.log
-              ;;
-            resend_latest)
-              python main.py --config config.yaml --email-only --require-email 2>&1 | tee run.log
               ;;
             *)
               python main.py --config config.yaml --no-email 2>&1 | tee run.log
@@ -192,6 +188,7 @@ jobs:
           name: latest-job-report
           path: reports/latest.md
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Commit monitor state
         if: success() && steps.run-mode.outputs.should_run == 'true' && steps.run-mode.outputs.mode != 'test_only'
@@ -201,12 +198,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           paths=()
-          for path in database/jobs.db reports/latest.md .github/state/job-email-sent; do
+          for path in database/seen_hashes.txt .github/state/job-email-sent; do
             [ -e "$path" ] && paths+=("$path")
           done
-          shopt -s nullglob
-          flags=(reports/email_sent_*.flag)
-          paths+=("${flags[@]}")
 
           if [ "${#paths[@]}" -gt 0 ]; then
             git add -- "${paths[@]}"

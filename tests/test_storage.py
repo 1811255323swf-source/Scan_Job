@@ -60,3 +60,30 @@ def test_store_loads_jobs_for_daily_report_retry(tmp_path):
         assert jobs[0].ai_analysis == "retry analysis"
     finally:
         store.close()
+
+
+def test_seen_hashes_persist_without_exposing_job_details(tmp_path):
+    seen_path = tmp_path / "seen_hashes.txt"
+    job = Job(
+        source="test",
+        company="Private Company",
+        position="C++实习生",
+        url="https://example.com/private-job",
+    )
+    score = ScoreResult(score=50, level="备选")
+
+    first = JobStore(tmp_path / "first.db", seen_path)
+    try:
+        assert first.insert(job, score, "personalized analysis")
+    finally:
+        first.close()
+
+    persisted = seen_path.read_text(encoding="utf-8")
+    assert job.url not in persisted
+    assert job.company not in persisted
+
+    second = JobStore(tmp_path / "second.db", seen_path)
+    try:
+        assert second.seen(job)
+    finally:
+        second.close()
