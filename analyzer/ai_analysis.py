@@ -45,8 +45,10 @@ class AIAnalyzer:
         prompt = self._build_prompt(job, score_result)
         try:
             if self.provider == "openai":
-                return self._analyze_with_openai_responses(prompt)
-            return self._analyze_with_chat_completions(prompt)
+                result = self._analyze_with_openai_responses(prompt)
+            else:
+                result = self._analyze_with_chat_completions(prompt)
+            return result or self.fallback(job, score_result)
         except Exception as exc:  # noqa: BLE001 - report safe error class only
             return f"AI分析暂不可用：{exc.__class__.__name__}。已保留规则评分结果。"
 
@@ -152,4 +154,3 @@ class AIAnalyzer:
 def ai_enabled_from_config(config: dict) -> bool:
     ai_config = config.get("ai", {})
     return as_bool(ai_config.get("enabled", True))
-

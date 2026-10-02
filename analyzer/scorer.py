@@ -15,6 +15,8 @@ def _level(score: int) -> str:
         return "建议关注"
     if score >= 50:
         return "备选"
+    if score >= 30:
+        return "可关注"
     return "过滤"
 
 
@@ -26,8 +28,10 @@ def score_job(job: Job, config: dict) -> ScoreResult:
     profile = config.get("user_profile", {})
 
     positive_keywords = keywords.get("positive", [])
+    required_keywords = keywords.get("required", positive_keywords)
     negative_keywords = keywords.get("negative", [])
     matched_positive = _contains_any(text, positive_keywords)
+    matched_required = _contains_any(text, required_keywords)
     negative_in_position = _contains_any(position_text, negative_keywords)
 
     score = 0
@@ -61,10 +65,10 @@ def score_job(job: Job, config: dict) -> ScoreResult:
         score += value
         matched_rules.append(f"{graduation_year}届可投 +{value}")
 
-    if not matched_positive:
+    if not matched_required:
         value = int(scoring.get("non_target_penalty", -30))
         score += value
-        penalties.append(f"缺少目标方向关键词 {value}")
+        penalties.append(f"缺少C++/系统方向关键词 {value}")
 
     if negative_in_position:
         value = int(scoring.get("negative_keyword_penalty", -30))
@@ -77,7 +81,7 @@ def score_job(job: Job, config: dict) -> ScoreResult:
         score += value
         penalties.append(f"实习周期可能冲突 {value}")
 
-    excluded = bool(negative_in_position) or not matched_positive
+    excluded = bool(negative_in_position) or not matched_required or not matched_positive
     score = max(0, min(100, score))
     return ScoreResult(
         score=score,

@@ -48,6 +48,21 @@ user_profile:
     - Redis
 
 keywords:
+  required:
+    - C++
+    - C/C++
+    - CPP
+    - Linux
+    - Socket
+    - TCP
+    - UDP
+    - epoll
+    - 服务器
+    - 服务端
+    - 系统开发
+    - 基础架构
+    - 嵌入式
+    - 网络通信
   positive:
     - C++
     - C/C++

@@ -59,3 +59,20 @@ def test_frontend_position_is_excluded():
     assert result.excluded
     assert result.level == "过滤"
 
+
+
+def test_generic_java_backend_is_excluded_when_cpp_direction_is_required():
+    config = base_config()
+    config["keywords"]["required"] = ["C++", "Linux", "Socket", "服务端"]
+    job = Job(
+        source="test",
+        company="Example",
+        position="Java后端实习生",
+        location="北京",
+        requirements="Spring Boot",
+        url="https://example.com/job/java",
+    )
+
+    result = score_job(job, config)
+
+    assert result.excluded

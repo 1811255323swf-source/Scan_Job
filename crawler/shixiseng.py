@@ -6,10 +6,12 @@ from io import BytesIO
 from urllib.parse import quote_plus, urljoin
 
 import requests
+from bs4 import BeautifulSoup
 from fontTools.ttLib import TTFont
 
 from crawler.generic import GenericCrawler
 from crawler.http import DEFAULT_HEADERS
+from models import Job, clean_text
 
 
 FONT_URL_PATTERN = re.compile(r"@font-face\s*\{.*?src:\s*url\(([^)]+)\)", re.DOTALL)
@@ -73,3 +75,31 @@ class ShixisengCrawler(GenericCrawler):
             except Exception as exc:  # noqa: BLE001 - one source page must not abort the report
                 self.logger.warning("failed to crawl %s: %s", url, exc.__class__.__name__)
         return self._unique(jobs)
+
+    def _parse_html(self, html: str, page_url: str) -> list[Job]:
+        soup = BeautifulSoup(html, "lxml")
+        jobs: list[Job] = []
+        for item in soup.select("[data-intern-id]"):
+            title_node = item.select_one(".intern-detail__job a.title")
+            if title_node is None:
+                continue
+            company_node = item.select_one(".intern-detail__company a.title")
+            location_node = item.select_one(".intern-detail__job .city")
+            detail_node = item.select_one(".intern-detail__job")
+            detail = clean_text(detail_node.get_text(" ", strip=True) if detail_node else "")
+            labels = [clean_text(node.get_text(" ", strip=True)) for node in item.select(".intern-label")]
+            description = "；".join(part for part in [detail, "、".join(labels)] if part)
+            href = clean_text(title_node.get("href", ""))
+            jobs.append(
+                Job(
+                    source=self.name,
+                    company=clean_text(company_node.get_text(" ", strip=True) if company_node else "")
+                    or self.name,
+                    position=clean_text(title_node.get_text(" ", strip=True)),
+                    location=clean_text(location_node.get_text(" ", strip=True) if location_node else ""),
+                    description=description,
+                    requirements=description,
+                    url=urljoin(page_url, href),
+                )
+            )
+        return jobs
